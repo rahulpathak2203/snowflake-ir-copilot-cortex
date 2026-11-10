@@ -1,0 +1,11 @@
+file_name,fund,doc_type,period,sector,description
+01_Fund_IV_Overview.pdf,Fund IV,fund_overview,2026-Q3,All,"Firm overview, Fund IV terms, strategy, track record, team"
+02_Fund_IV_Q4_2025_Investor_Letter.pdf,Fund IV,quarterly_letter,2025-Q4,All,"Q4 2025 performance, portfolio highlights, outlook"
+03_Fund_IV_Q1_2026_Investor_Letter.pdf,Fund IV,quarterly_letter,2026-Q1,All,"Q1 2026 performance, portfolio highlights, outlook"
+04_Fund_IV_Q2_2026_Investor_Letter.pdf,Fund IV,quarterly_letter,2026-Q2,All,"Q2 2026 performance, portfolio highlights, outlook"
+05_Fund_IV_Q3_2026_Investor_Letter.pdf,Fund IV,quarterly_letter,2026-Q3,All,"Q3 2026 performance, portfolio highlights, outlook"
+06_ESG_Responsible_Investment_Policy.pdf,Fund IV,policy_esg,2026,All,"ESG governance, exclusions, climate targets, DEI, reporting"
+07_Valuation_Policy.pdf,Fund IV,policy_valuation,2025,All,"Fair value methods, governance, controls, disclosure"
+08_Fund_IV_Fee_and_Expense_Summary.pdf,Fund IV,fees_terms,2023,All,"Management fee, carry, waterfall, offsets, expenses, key person"
+09_Fund_IV_Portfolio_Company_Profiles.pdf,Fund IV,portfolio_profiles,2026-Q3,Healthcare; Infrastructure; Software,"Profiles of Tessaline, Corvane, Pellucid, Meridale"
+10_Due_Diligence_Questionnaire_Responses.pdf,Fund IV,ddq,2026-Q2,All,"Standard ILPA DDQ answers: organisation, process, risk, ESG, reporting"

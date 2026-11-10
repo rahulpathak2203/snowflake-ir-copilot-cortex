@@ -1,1 +1,0 @@
-# snowflake-ir-copilot-cortex

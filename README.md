@@ -1,6 +1,6 @@
 # IR Copilot: Investor Relations Q&A on Snowflake Cortex
 
-An AI assistant that answers investor and due-diligence questions about a private equity fund. It combines **document search** (Cortex Search over fund PDFs) with **SQL over fund data** (Cortex Analyst over a semantic view), and a **Cortex Agent** decides which to use for each question, or uses both. It's also available to external AI assistants (Claude, ChatGPT, Cursor) through a **Snowflake-managed MCP server**, and the repo includes a **custom RAG** built without Cortex Search (embeddings + vector similarity) to compare against the managed service. A **Streamlit in Snowflake** app handles bulk DDQ drafting.
+An AI assistant that answers investor and due-diligence questions about a private equity fund. It combines **document search** (Cortex Search over fund PDFs) with **SQL over fund data** (Cortex Analyst over a semantic view), and a **Cortex Agent** decides which to use for each question, or uses both. It's also available to external AI assistants (Claude, ChatGPT, Cursor) through a **Snowflake-managed MCP server**, and the repo includes a **custom RAG** built without Cortex Search (embeddings + vector similarity) to compare against the managed service. A **portfolio risk monitor** takes it from question-answering to an **agentic workflow**: a scheduled agent flags at-risk companies, investigates why in the documents, and logs alerts for the deal team to review. A **Streamlit in Snowflake** app handles bulk DDQ drafting.
 
 > All documents describe a **fictional** firm (Halvoran Ridge Capital) and fund (Fund IV). Every company, person and figure is invented.
 
@@ -43,6 +43,12 @@ FUND_DOCS_SEARCH  ── filter attributes: fund, doc_type, period, sector
    ├── Streamlit app → chat + bulk DDQ drafting with CSV export
    └── Snowflake-managed MCP server  (OAuth, least-privilege role)
           └── Claude / ChatGPT / Cursor call the agent, search and analyst as tools
+
+ Scheduled task (quarterly) ── DATA_AGENT_RUN ──▶ Risk Monitor Agent
+   1. get_risk_flags     deterministic SQL threshold check  → Ostrava flagged
+   2. fund_docs_search   why did the numbers move?          → lost contract, new CEO
+   3. fund_data_analyst  optional trend context
+   4. log_risk_alert     write alert → RISK_ALERTS (PENDING_REVIEW) → human confirms / dismisses
 ```
 
 ## Custom RAG without Cortex Search
@@ -63,6 +69,23 @@ It's wrapped in a stored procedure: `CALL ASK_FUND_DOCS('question', top_k, doc_t
 | Scale | Compares every chunk; fine for hundreds | Built for large-scale serving |
 | Control | Full: model, scores, top-k, prompt | Managed |
 
+## Agentic workflow: portfolio risk monitor
+
+IR Copilot answers questions when asked. The risk monitor works **on its own**: a scheduled task starts an agent after each quarter with `SNOWFLAKE.CORTEX.DATA_AGENT_RUN`, and the agent works through a goal step by step.
+
+1. **Check:** `get_risk_flags` compares every company with the previous quarter against configurable thresholds in `RISK_THRESHOLDS` (leverage above 5.5x, leverage up more than 0.5x, revenue down more than 5%, EBITDA margin down more than 1 point).
+2. **Investigate:** for each flagged company, the agent writes its own search queries to find out why, judges whether the result explains the movement, and retries with different wording if it doesn't.
+3. **Draft:** it writes a short alert with the numbers, the likely cause with its source, and a suggested next step.
+4. **Act:** it calls `log_risk_alert`, which writes one row to `RISK_ALERTS` with status `PENDING_REVIEW`. The deal team confirms or dismisses it.
+
+On the demo data, only **Ostrava Packaging** is flagged, on all four rules (leverage 5.0x → 5.9x, revenue −8.1%, margin 13.8% → 12.6%), and the agent links it to the lost customer contract described in the Q3 2026 letter.
+
+Design choices:
+- **Rules in SQL, judgement in the LLM:** threshold checks must give the same answer every time, so they're deterministic SQL. The agent handles what needs judgement: finding and checking explanations, and writing the alert.
+- **One narrow action:** the agent's only action is logging an alert through a specific procedure. It can't send messages or change other data.
+- **Human in the loop:** alerts wait for review; people stay accountable for decisions.
+- **Safe to re-run:** `log_risk_alert` skips a company already logged for that quarter, so a retried task doesn't create duplicates. Every run's full response is kept in `RISK_MONITOR_RUNS` for audit.
+
 ## Access from AI assistants (MCP)
 
 `sql/06_mcp_server.sql` exposes IR Copilot through a **Snowflake-managed MCP server** with three tools: the Cortex Agent, Cortex Search and Cortex Analyst. An IR analyst can ask questions from Claude (or any MCP client) without opening Snowflake, while Snowflake still governs every call:
@@ -81,6 +104,7 @@ It's wrapped in a stored procedure: `CALL ASK_FUND_DOCS('question', top_k, doc_t
 | `sql/04_create_agent.sql` | Cortex Agent with both tools (Search + Analyst) and routing instructions |
 | `sql/05_custom_rag.sql` | The same RAG built by hand: AI_EMBED + VECTOR column + cosine similarity + AI_COMPLETE, wrapped in a procedure |
 | `sql/06_mcp_server.sql` | Snowflake-managed MCP server exposing the agent, search and analyst to external AI assistants (Claude, ChatGPT, Cursor), with a least-privilege role and OAuth |
+| `sql/07_risk_monitor.sql` | Agentic workflow: risk thresholds, two custom tools (flag check, alert logging), a risk monitor agent, and a quarterly scheduled task |
 | `app/streamlit_app.py` | Streamlit in Snowflake app: chat with sources, metadata filters, bulk DDQ drafting |
 | `sample_data/` | 10 fictional fund PDFs (21 pages), `document_manifest.csv` with each PDF's metadata, and `generate_sample_docs.py` that generates them |
 | `docs/screenshots/` | Screenshots of the agent, Snowflake Intelligence and Claude via MCP |
@@ -99,7 +123,8 @@ Figures are consistent across documents, so cross-document questions have real a
 5. **Agent:** run `sql/04_create_agent.sql`, then chat with *IR Copilot* in Snowflake Intelligence.
 6. **Custom RAG (optional):** run `sql/05_custom_rag.sql`, then `CALL ASK_FUND_DOCS('your question');`
 7. **MCP (optional):** run `sql/06_mcp_server.sql`, then add the endpoint as a custom connector in Claude.
-8. **App (optional):** create a Streamlit app in `IR_COPILOT.FUND_DOCS` and paste in `app/streamlit_app.py`.
+8. **Risk monitor (optional):** run `sql/07_risk_monitor.sql`, then check `RISK_ALERTS` for the logged alert.
+9. **App (optional):** create a Streamlit app in `IR_COPILOT.FUND_DOCS` and paste in `app/streamlit_app.py`.
 
 ## Design decisions
 
